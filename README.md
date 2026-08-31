@@ -1,36 +1,102 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Fathom
 
-## Getting Started
+A real full-text search engine: its own inverted index, its own Porter
+stemmer, Okapi BM25 ranking, boolean/phrase/negation query syntax, and
+typo-tolerant fuzzy matching - indexed over 2,656 real paragraphs from
+five public-domain novels (Alice's Adventures in Wonderland, Pride and
+Prejudice, The Adventures of Sherlock Holmes, The Time Machine, and A
+Christmas Carol, fetched live from Project Gutenberg).
 
-First, run the development server:
+No vector database, no external search API, no LLM in the retrieval
+path - every piece of the ranking pipeline is implemented from scratch
+and tested against known-correct results.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Why this is real, not a demo
+
+Search engines are easy to fake (return anything, call it "results")
+and hard to get right. Every layer here is independently verified:
+
+- **The stemmer** is a full implementation of Porter's 1980 algorithm
+  (all eight rule steps operating on the classic consonant/vowel
+  "measure"), tested against the canonical examples from Porter's own
+  paper *and* a property-based suite proving that inflected forms of
+  the same word ("run"/"running"/"runs", "organize"/"organization")
+  converge to one shared stem - the actual property a search index
+  depends on.
+- **BM25 ranking** is checked against an independently hand-computed
+  expected score on a tiny hand-crafted corpus (the test recomputes
+  the textbook formula itself, not just re-running the implementation),
+  plus property tests for term-frequency reward, document-length
+  normalization, and inverse-document-frequency weighting.
+- **The inverted index** is checked against a brute-force scan for
+  every posting, term frequency, and position.
+- **The query engine** (boolean AND/OR/NOT, phrase adjacency, fuzzy
+  correction) is tested end-to-end against a small corpus with known
+  relevance judgments I control - including a case that exposed a real
+  bug during development (see below).
+
+## A bug this testing approach actually caught
+
+Phrase queries stem and check adjacency in the *filtered* token
+stream, matching how documents are indexed - stopwords ("the", "and",
+"a"...) are dropped before positions are assigned. The first version
+of the phrase matcher stemmed the raw query phrase without applying
+that same filter, so `"clever fox"` happened to work (no stopwords in
+it) while a phrase like `"fox and crow"` silently matched nothing,
+because "and" was stemmed and searched for as a real term instead of
+being dropped like it is on the document side. Live-testing the app in
+a browser (not just unit tests, which had accidentally avoided any
+phrase containing a stopword) surfaced it immediately. Fixed by
+filtering stopwords out of phrase terms the same way `analyze()` does
+for documents - now covered by a regression test.
+
+The unavoidable remaining limitation: a phrase built *entirely* from
+stopwords ("to be or not to be") can't match anything meaningful,
+since there's no content word left to anchor on. This is a known,
+documented trade-off of stopword-filtered indexing, explained in the
+app's own "How does this work?" panel rather than hidden.
+
+## Architecture
+
+```
+src/lib/search/
+  stemmer.ts        Porter stemmer (pure function, no deps)
+  stopwords.ts       ~150-word English stopword list
+  tokenizer.ts        split -> filter stopwords -> stem (shared by docs and queries)
+  invertedIndex.ts   term -> postings (docId, frequency, positions), serializable
+  bm25.ts             Okapi BM25 scoring
+  fuzzy.ts            Levenshtein edit distance + closest-term lookup
+  queryParser.ts       "word word" (AND) / "OR" / "-word" (NOT) / "phrase" grammar
+  engine.ts            ties it all together: parse -> resolve -> filter -> rank -> snippet
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`scripts/ingest.ts` fetches the five books directly from Project
+Gutenberg, strips their license boilerplate, splits each into
+paragraph-level documents, builds the index, and writes it to
+`src/data/index.json` (~8MB, loaded once per server process and cached
+in memory - see `src/lib/search/loadIndex.ts`).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The UI (`src/app/page.tsx` + `SearchInterface.tsx`) is a single search
+box hitting `GET /api/search?q=...`, debounced client-side, with
+result snippets, BM25 scores shown for transparency, and a live
+"did you mean" line when a query term gets fuzzy-corrected.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Local development
 
-## Learn More
+```bash
+npm install
+npm run ingest   # fetches the corpus and builds src/data/index.json (only needed once)
+npm run dev
+npm test
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Deliberately out of scope for v1
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Multi-word fuzzy correction (only single out-of-vocabulary words are
+  corrected, not whole misspelled phrases)
+- Faceted search / filtering by book
+- A larger or user-uploadable corpus (the index is a static build
+  artifact regenerated by `npm run ingest`, not a live-updating store)
+- Semantic/vector search - this is intentionally a classical,
+  transparent, fully-explainable ranking pipeline, not an
+  embedding-based one
