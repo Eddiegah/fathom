@@ -15,6 +15,9 @@ export interface SearchResult {
 
 export interface SearchResponse {
   results: SearchResult[];
+  /** the raw (unstemmed) positive query words - what the UI highlights
+   * inside each snippet, so a result visibly shows *why* it matched. */
+  matchedWords: string[];
   /** original typed word -> the vocabulary term it was corrected to,
    * only present for word terms that had zero exact matches. */
   corrections: Record<string, string>;
@@ -153,7 +156,7 @@ export function search(index: InvertedIndex, rawQuery: string, options: { limit?
   const fuzzyMaxDistance = options.fuzzyMaxDistance ?? 2;
 
   const parsed: ParsedQuery = parseQuery(rawQuery);
-  if (parsed.length === 0) return { results: [], corrections: {} };
+  if (parsed.length === 0) return { results: [], matchedWords: [], corrections: {} };
 
   const clauseResolutions = parsed.map((clause) => resolveClause(index, clause, fuzzyMaxDistance));
   const matchingDocIds = union(clauseResolutions.map((c) => c.docIds));
@@ -180,5 +183,5 @@ export function search(index: InvertedIndex, rawQuery: string, options: { limit?
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
 
-  return { results, corrections };
+  return { results, matchedWords: Array.from(new Set(positiveWords)), corrections };
 }

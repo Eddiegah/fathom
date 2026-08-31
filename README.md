@@ -1,5 +1,14 @@
 # Fathom
 
+[![CI](https://github.com/Eddiegah/fathom/actions/workflows/ci.yml/badge.svg)](https://github.com/Eddiegah/fathom/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Live demo](https://img.shields.io/badge/demo-live-3ecf8e?logo=vercel&logoColor=white)](https://fathom-livid.vercel.app)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-74%20passing-brightgreen)
+
+**[fathom-livid.vercel.app](https://fathom-livid.vercel.app)**
+
 A real full-text search engine: its own inverted index, its own Porter
 stemmer, Okapi BM25 ranking, boolean/phrase/negation query syntax, and
 typo-tolerant fuzzy matching - indexed over 2,656 real paragraphs from
@@ -9,7 +18,9 @@ Christmas Carol, fetched live from Project Gutenberg).
 
 No vector database, no external search API, no LLM in the retrieval
 path - every piece of the ranking pipeline is implemented from scratch
-and tested against known-correct results.
+and tested against known-correct results. Matched query terms are
+highlighted directly in each result snippet, so a result never just
+asserts relevance - it shows you the exact words that earned it.
 
 ## Why this is real, not a demo
 
@@ -100,3 +111,7 @@ npm test
 - Semantic/vector search - this is intentionally a classical,
   transparent, fully-explainable ranking pipeline, not an
   embedding-based one
+
+## License
+
+MIT © [Edmund Eric Gah](https://github.com/Eddiegah) - see [LICENSE](LICENSE).

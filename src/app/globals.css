@@ -32,3 +32,25 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
+
+@keyframes result-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-result-in {
+  animation: result-in 260ms ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-result-in {
+    animation: none;
+    opacity: 1;
+  }
+}
